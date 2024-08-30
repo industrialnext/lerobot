@@ -23,11 +23,11 @@ override_dataset_stats:
   # TODO(rcadene, alexander-soare): we override state and action stats to use the same as the pretrained model
   # from the original codebase, but we should remove these and train our own pretrained model
   observation.state:
-    min: [13.456424, 32.938293]
-    max: [496.14618, 510.9579]
+    min: [0.1276, -0.4495, 3.5718, -5.7937, 0.0000]
+    max: [0.28670, 1.3966, 5.6117, -3.9395, 604.75]
   action:
-    min: [12.0, 25.0]
-    max: [511.0, 511.0]
+    min: [126.6000, -752.2200, 124.2200]
+    max: [599.7500, 468.9600, 1299.1801]
 
 training:
   offline_steps: 200000
