@@ -34,7 +34,7 @@ training:
   offline_steps: ???
 
   # Number of workers for the offline training dataloader.
-  num_workers: 4
+  num_workers: 8
 
   batch_size: ???
 
