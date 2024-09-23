@@ -1,6 +1,6 @@
 # @package _global_
 
-fps: 15
+fps: 5
 
 env:
   name: my_custom_aloha
