@@ -90,45 +90,47 @@ def make_dataset(cfg, split: str = "train") -> LeRobotDataset | MultiLeRobotData
             random_order=cfg_tf.random_order,
         )
 
-    # if cfg.dataset_repo_id is None:
-    # if isinstance(cfg.dataset_repo_id, str):
-    #     dataset = LeRobotDataset(
-    #         cfg.dataset_repo_id,
-    #         split=split,
-    #         delta_timestamps=cfg.training.get("delta_timestamps"),
-    #         image_transforms=image_transforms,
-    #         video_backend=cfg.video_backend,
-    #     )
-    # else:
-    #     dataset = MultiLeRobotDataset(
-    #         cfg.dataset_repo_id,
-    #         split=split,
-    #         delta_timestamps=cfg.training.get("delta_timestamps"),
-    #         image_transforms=image_transforms,
-    #         video_backend=cfg.video_backend,
-    #     )
-    from pathlib import Path
-    from lerobot.common.datasets.push_dataset_to_hub.aloha_hdf5_format import from_raw_to_lerobot_format
-    from lerobot.common.datasets.compute_stats import compute_stats
+    if cfg.hdf5_data_dir:
+        from pathlib import Path
+        from lerobot.common.datasets.push_dataset_to_hub.aloha_hdf5_format import from_raw_to_lerobot_format
+        from lerobot.common.datasets.compute_stats import compute_stats
 
+        data_dir = Path(cfg.hdf5_data_dir)
 
-    raw_dir = Path("/home/hemanth/imitation_learning/aug_22_hdf5s/sim")
-    dataset, episode_data_index, info = from_raw_to_lerobot_format(raw_dir, videos_dir=None, video=False)
+        if data_dir.exists():
+            logging.info(f"HDF5 data dir: {data_dir}")
+            dataset, episode_data_index, info = from_raw_to_lerobot_format(data_dir, videos_dir=None, video=False)
+            stats = compute_stats(dataset, batch_size=16, num_workers=16, max_num_samples=None)
+        else:
+            raise ValueError(f"HDF5 data directory: {data_dir} does not exist!")
 
-    stats = compute_stats(dataset, batch_size=16, num_workers=16, max_num_samples=None)
-
-    dataset = LeRobotDataset.from_preloaded(
-        root=raw_dir,
-        hf_dataset=dataset,
-        episode_data_index=episode_data_index,
-        stats=stats,
-        # delta_timestamps=None,
-        transform=image_transforms,
-        split=split,
-
-        delta_timestamps=cfg.training.get("delta_timestamps"),
-        info=info,
-    )
+        dataset = LeRobotDataset.from_preloaded(
+            root=data_dir,
+            hf_dataset=dataset,
+            episode_data_index=episode_data_index,
+            stats=stats,
+            # delta_timestamps=None,
+            transform=image_transforms,
+            split=split,
+            delta_timestamps=cfg.training.get("delta_timestamps"),
+            info=info,
+        )
+    elif isinstance(cfg.dataset_repo_id, str):
+        dataset = LeRobotDataset(
+            cfg.dataset_repo_id,
+            split=split,
+            delta_timestamps=cfg.training.get("delta_timestamps"),
+            image_transforms=image_transforms,
+            video_backend=cfg.video_backend,
+        )
+    else:
+        dataset = MultiLeRobotDataset(
+            cfg.dataset_repo_id,
+            split=split,
+            delta_timestamps=cfg.training.get("delta_timestamps"),
+            image_transforms=image_transforms,
+            video_backend=cfg.video_backend,
+        )
 
     if cfg.get("override_dataset_stats"):
         for key, stats_dict in cfg.override_dataset_stats.items():
