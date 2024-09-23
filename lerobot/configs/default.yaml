@@ -1,7 +1,7 @@
 defaults:
   - _self_
   - env: pusht
-  - policy: diffusion
+  - policy: my_custom_diffusion
 
 hydra:
   run:
@@ -16,6 +16,8 @@ hydra:
 # Note that when resuming a run, the default behavior is to use the configuration from the checkpoint,
 # regardless of what's provided with the training command at the time of resumption.
 resume: false
+# Overwrite checkpoint config
+overwrite_config: false
 device: cuda  # cpu
 # `use_amp` determines whether to use Automatic Mixed Precision (AMP) for training and evaluation. With AMP,
 # automatic gradient scaling is used.
