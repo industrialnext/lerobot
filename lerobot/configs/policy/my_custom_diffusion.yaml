@@ -36,6 +36,8 @@ training:
   eval_freq: -1
   save_freq: 25000
   save_checkpoint: true
+  # Default worker: 4
+  num_workers: 8
 
   batch_size: 64
   grad_clip_norm: 10
