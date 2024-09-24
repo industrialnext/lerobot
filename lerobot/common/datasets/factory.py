@@ -99,7 +99,7 @@ def make_dataset(cfg, split: str = "train") -> LeRobotDataset | MultiLeRobotData
 
         if data_dir.exists():
             logging.info(f"HDF5 data dir: {data_dir}")
-            dataset, episode_data_index, info = from_raw_to_lerobot_format(data_dir, videos_dir=None, video=False)
+            dataset, episode_data_index, info = from_raw_to_lerobot_format(raw_dir=data_dir, videos_dir=None, fps=cfg.env.fps, video=False)
             stats = compute_stats(dataset, batch_size=16, num_workers=16, max_num_samples=None)
         else:
             raise ValueError(f"HDF5 data directory: {data_dir} does not exist!")
