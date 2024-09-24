@@ -6,7 +6,7 @@
 
 seed: 100000
 dataset_repo_id: absolutebogus
-hdf5_data_dir: something
+hdf5_data_dir: null
 
 override_dataset_stats:
   observation.images.cam1:
