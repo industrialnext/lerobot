@@ -126,7 +126,7 @@ def visualize_dataset(
         data_dir = Path(hdf5_data_dir)
         if data_dir.exists():
             logging.info(f"HDF5 data dir: {data_dir}")
-            dataset, episode_data_index, info = from_raw_to_lerobot_format(raw_dir=data_dir, videos_dir=None, fps=cfg.env.fps, video=False)
+            dataset, episode_data_index, info = from_raw_to_lerobot_format(raw_dir=data_dir, videos_dir=None, fps=5, video=False)
             stats = compute_stats(dataset, batch_size=16, num_workers=16, max_num_samples=None)
         else:
             raise ValueError(f"Data directory: {data_dir} does not exists!")
@@ -136,7 +136,6 @@ def visualize_dataset(
             hf_dataset=dataset,
             episode_data_index=episode_data_index,
             stats=stats,
-            delta_timestamps=cfg.training.get("delta_timestamps"),
             info=info,
         )
     else:
