@@ -200,8 +200,14 @@ def main():
     parser.add_argument(
         "--repo-id",
         type=str,
-        required=True,
+        required=False,
         help="Name of hugging face repositery containing a LeRobotDataset dataset (e.g. `lerobot/pusht`).",
+    )
+    parser.add_argument(
+        "--hdf5-data-dir",
+        type=str,
+        required=False,
+        help="HDF5 dataset directory (e.g. 'PATH/hdf5/sim/').",
     )
     parser.add_argument(
         "--episode-index",
