@@ -76,6 +76,7 @@ import tqdm
 
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.common.datasets.push_dataset_to_hub.aloha_hdf5_format import from_raw_to_lerobot_format
+from lerobot.common.datasets.compute_stats import compute_stats
 
 
 class EpisodeSampler(torch.utils.data.Sampler):
