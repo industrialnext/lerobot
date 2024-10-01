@@ -76,7 +76,6 @@ import tqdm
 
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.common.datasets.push_dataset_to_hub.aloha_hdf5_format import from_raw_to_lerobot_format
-from lerobot.common.datasets.compute_stats import compute_stats
 
 
 class EpisodeSampler(torch.utils.data.Sampler):
@@ -128,7 +127,6 @@ def visualize_dataset(
         if data_dir.exists():
             logging.info(f"HDF5 data dir: {data_dir}")
             dataset, episode_data_index, info = from_raw_to_lerobot_format(raw_dir=data_dir, videos_dir=None, fps=5, video=False)
-            stats = compute_stats(dataset, batch_size=16, num_workers=16, max_num_samples=None)
         else:
             raise ValueError(f"Data directory: {data_dir} does not exists!")
 
@@ -136,7 +134,6 @@ def visualize_dataset(
             root=data_dir,
             hf_dataset=dataset,
             episode_data_index=episode_data_index,
-            stats=stats,
             info=info,
         )
     else:
