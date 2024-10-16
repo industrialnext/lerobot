@@ -13,22 +13,22 @@ override_dataset_stats:
     # stats from imagenet, since we use a pretrained vision model
     mean: [[[0.485]], [[0.456]], [[0.406]]]  # (c,1,1)
     std: [[[0.229]], [[0.224]], [[0.225]]]  # (c,1,1)
-  observation.images.cam2:
-    # stats from imagenet, since we use a pretrained vision model
-    mean: [[[0.485]], [[0.456]], [[0.406]]]  # (c,1,1)
-    std: [[[0.229]], [[0.224]], [[0.225]]]  # (c,1,1)
-  observation.images.cam3:
-    # stats from imagenet, since we use a pretrained vision model
-    mean: [[[0.485]], [[0.456]], [[0.406]]]  # (c,1,1)
-    std: [[[0.229]], [[0.224]], [[0.225]]]  # (c,1,1)
+      #observation.images.cam2:
+      #  # stats from imagenet, since we use a pretrained vision model
+      #  mean: [[[0.485]], [[0.456]], [[0.406]]]  # (c,1,1)
+      #  std: [[[0.229]], [[0.224]], [[0.225]]]  # (c,1,1)
+      #observation.images.cam3:
+      #  # stats from imagenet, since we use a pretrained vision model
+      #  mean: [[[0.485]], [[0.456]], [[0.406]]]  # (c,1,1)
+      #  std: [[[0.229]], [[0.224]], [[0.225]]]  # (c,1,1)
   # TODO(rcadene, alexander-soare): we override state and action stats to use the same as the pretrained model
   # from the original codebase, but we should remove these and train our own pretrained model
   observation.state:
-    min: [0.1276, -0.4495, 3.5718, -5.7937, 0.0000]
-    max: [0.28670, 1.3966, 5.6117, -3.9395, 604.75]
+    min: [0.1276, -0.4495, 3.5718, -5.7937]
+    max: [0.28670, 1.3966, 5.6117, -3.9395]
   action:
-    min: [126.6000, -752.2200, 124.2200]
-    max: [599.7500, 468.9600, 1299.1801]
+    min: [126.6000, -752.2200, 124.2200, -474.0, 0]
+    max: [599.7500, 468.9600, 1299.1801, 114.0, 1]
 
 training:
   offline_steps: 200000
@@ -37,9 +37,9 @@ training:
   save_freq: 25000
   save_checkpoint: true
   # Default worker: 4
-  num_workers: 8
+  num_workers: 48
 
-  batch_size: 64
+  batch_size: 256
   grad_clip_norm: 10
   lr: 1.0e-4
   lr_scheduler: cosine
@@ -51,8 +51,8 @@ training:
 
   delta_timestamps:
     observation.images.cam1: "[i / ${fps} for i in range(1 - ${policy.n_obs_steps}, 1)]"
-    observation.images.cam2: "[i / ${fps} for i in range(1 - ${policy.n_obs_steps}, 1)]"
-    observation.images.cam3: "[i / ${fps} for i in range(1 - ${policy.n_obs_steps}, 1)]"
+      #observation.images.cam2: "[i / ${fps} for i in range(1 - ${policy.n_obs_steps}, 1)]"
+      #observation.images.cam3: "[i / ${fps} for i in range(1 - ${policy.n_obs_steps}, 1)]"
     observation.state: "[i / ${fps} for i in range(1 - ${policy.n_obs_steps}, 1)]"
     action: "[i / ${fps} for i in range(1 - ${policy.n_obs_steps}, 1 - ${policy.n_obs_steps} + ${policy.horizon})]"
 
@@ -75,8 +75,8 @@ policy:
   input_shapes:
     # TODO(rcadene, alexander-soare): add variables for height and width from the dataset/env?
     observation.images.cam1: [3, 480, 640]
-    observation.images.cam2: [3, 480, 640]
-    observation.images.cam3: [3, 480, 640]
+      #observation.images.cam2: [3, 480, 640]
+      #observation.images.cam3: [3, 480, 640]
     observation.state: ["${env.state_dim}"]
   output_shapes:
     action: ["${env.action_dim}"]
@@ -84,8 +84,8 @@ policy:
   # Normalization / Unnormalization
   input_normalization_modes:
     observation.images.cam1: mean_std
-    observation.images.cam2: mean_std
-    observation.images.cam3: mean_std
+      #observation.images.cam2: mean_std
+      #observation.images.cam3: mean_std
     observation.state: min_max
   output_normalization_modes:
     action: min_max
