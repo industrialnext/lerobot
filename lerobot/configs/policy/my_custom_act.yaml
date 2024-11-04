@@ -23,21 +23,21 @@ override_dataset_stats:
     # stats from imagenet, since we use a pretrained vision model
     mean: [[[0.485]], [[0.456]], [[0.406]]]  # (c,1,1)
     std: [[[0.229]], [[0.224]], [[0.225]]]  # (c,1,1)
-  observation.images.cam2:
-    # stats from imagenet, since we use a pretrained vision model
-    mean: [[[0.485]], [[0.456]], [[0.406]]]  # (c,1,1)
-    std: [[[0.229]], [[0.224]], [[0.225]]]  # (c,1,1)
-  observation.images.cam3:
-    # stats from imagenet, since we use a pretrained vision model
-    mean: [[[0.485]], [[0.456]], [[0.406]]]  # (c,1,1)
-    std: [[[0.229]], [[0.224]], [[0.225]]]  # (c,1,1)
+      #observation.images.cam2:
+      #  # stats from imagenet, since we use a pretrained vision model
+      #  mean: [[[0.485]], [[0.456]], [[0.406]]]  # (c,1,1)
+      #  std: [[[0.229]], [[0.224]], [[0.225]]]  # (c,1,1)
+      #observation.images.cam3:
+      #  # stats from imagenet, since we use a pretrained vision model
+      #  mean: [[[0.485]], [[0.456]], [[0.406]]]  # (c,1,1)
+      #  std: [[[0.229]], [[0.224]], [[0.225]]]  # (c,1,1)
   # observation.images.cam_low:
   #   # stats from imagenet, since we use a pretrained vision model
   #   mean: [[[0.485]], [[0.456]], [[0.406]]]  # (c,1,1)
   #   std: [[[0.229]], [[0.224]], [[0.225]]]  # (c,1,1)
 
 training:
-  offline_steps: 100000
+  offline_steps: 350000
   online_steps: 0
   eval_freq: -1
   save_freq: 20000
@@ -69,8 +69,8 @@ policy:
   input_shapes:
     # TODO(rcadene, alexander-soare): add variables for height and width from the dataset/env?
     observation.images.cam1: [3, 480, 640]
-    observation.images.cam2: [3, 480, 640]
-    observation.images.cam3: [3, 480, 640]
+      #observation.images.cam2: [3, 480, 640]
+      #observation.images.cam3: [3, 480, 640]
     observation.state: ["${env.state_dim}"]
   output_shapes:
     action: ["${env.action_dim}"]
@@ -78,8 +78,8 @@ policy:
   # Normalization / Unnormalization
   input_normalization_modes:
     observation.images.cam1: mean_std
-    observation.images.cam2: mean_std
-    observation.images.cam3: mean_std
+      #observation.images.cam2: mean_std
+      #observation.images.cam3: mean_std
     observation.state: mean_std
   output_normalization_modes:
     action: mean_std
