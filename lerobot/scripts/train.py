@@ -21,6 +21,7 @@ from copy import deepcopy
 from pathlib import Path
 from pprint import pformat
 from threading import Lock
+import os
 
 import hydra
 import numpy as np
@@ -30,6 +31,11 @@ from omegaconf import DictConfig, ListConfig, OmegaConf
 from termcolor import colored
 from torch import nn
 from torch.cuda.amp import GradScaler
+
+import torch.multiprocessing as mp
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed import init_process_group, destroy_process_group
 
 from lerobot.common.datasets.factory import make_dataset, resolve_delta_timestamps
 from lerobot.common.datasets.lerobot_dataset import MultiLeRobotDataset
@@ -175,6 +181,7 @@ def log_train_info(logger: Logger, info, step, cfg, dataset, is_online):
     num_episodes = num_samples / avg_samples_per_ep
     num_epochs = num_samples / dataset.num_samples
     log_items = [
+        f"device:{info['device']}",
         f"step:{format_big_number(step)}",
         # number of samples seen during training
         f"smpl:{format_big_number(num_samples)}",
@@ -324,6 +331,10 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
         dataset_stats=offline_dataset.stats if not cfg.resume else None,
         pretrained_policy_name_or_path=str(logger.last_pretrained_model_dir) if cfg.resume else None,
     )
+
+    # Wrap policy into DDP
+    policy = DDP(policy, device_ids=[device])
+
     assert isinstance(policy, nn.Module)
     # Create optimizer and scheduler
     # Temporary hack to move optimizer out of policy
@@ -394,8 +405,9 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
             shuffle=True,
         )
     else:
-        shuffle = True
-        sampler = None
+        shuffle = False
+        sampler = DistributedSampler(offline_dataset)
+
     dataloader = torch.utils.data.DataLoader(
         offline_dataset,
         num_workers=cfg.training.num_workers,
@@ -412,6 +424,19 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
     for _ in range(step, cfg.training.offline_steps):
         if offline_step == 0:
             logging.info("Start offline training on a fixed dataset")
+
+        if isinstance(sampler, DistributedSampler):
+            # Float
+            epoch = (step * cfg.training.batch_size) / offline_dataset.num_samples
+            # Get whole number
+            epoch_int = int(epoch)
+            # Get decimal
+            epoch_decimal = epoch - epoch_int
+
+            # Shuffle on or right before a new epoch if num_samples not divisible by batch_size
+            if offline_dataset.num_samples - offline_dataset.num_samples * epoch_decimal < cfg.training.batch_size:
+                logging.info(f"Calling sampler.set_epoch to shuffle at {epoch} epochs")
+                sampler.set_epoch(epoch_int)
 
         start_time = time.perf_counter()
         batch = next(dl_iter)
@@ -431,6 +456,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
         )
 
         train_info["dataloading_s"] = dataloading_s
+        train_info["device"] = device
 
         if step % cfg.training.log_freq == 0:
             log_train_info(logger, train_info, step, cfg, offline_dataset, is_online=False)
@@ -640,13 +666,55 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
     logging.info("End of training")
 
 
+def ddp_setup(rank: int, world_size: int):
+    """
+       Args:
+           rank: Unique identifier of each process
+           world_size: Total number of processes
+    """
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "12355"
+    torch.cuda.set_device(rank)
+    init_process_group(backend="nccl", rank=rank, world_size=world_size)
+
+
+def train_wrapper(rank: int, world_size: int, cfg: DictConfig, out_dir: str|None=None, job_name: str|None=None):
+    # Update device index
+    cfg.device = f"cuda:{rank}"
+
+    # Initialize the group process
+    ddp_setup(rank, world_size)
+
+    if world_size > 1 and rank > 0:
+        # Only save checkpoints on index zero when using more than 1 GPU
+        cfg.training.save_checkpoint = False
+        cfg.wandb.enable = False
+
+    train(cfg, out_dir=out_dir, job_name=job_name)
+    # Clean up
+    destroy_process_group()
+
+
 @hydra.main(version_base="1.2", config_name="default", config_path="../configs")
 def train_cli(cfg: dict):
-    train(
+    # Default 1
+    world_size = 1
+
+    if not cfg.device.split(":")[-1].isdigit():
+        # Number of processes across the training job == number of GPUs used
+        world_size = torch.cuda.device_count()
+
+    logging.info(f"{world_size} GPU(s) used")
+
+    args = (
+        world_size,
         cfg,
-        out_dir=hydra.core.hydra_config.HydraConfig.get().run.dir,
-        job_name=hydra.core.hydra_config.HydraConfig.get().job.name,
+        hydra.core.hydra_config.HydraConfig.get().run.dir,
+        hydra.core.hydra_config.HydraConfig.get().job.name,
     )
+
+    # args are copied for each child process
+    mp.spawn(train_wrapper, args, nprocs=world_size)
 
 
 def train_notebook(out_dir=None, job_name=None, config_name="default", config_path="../configs"):
