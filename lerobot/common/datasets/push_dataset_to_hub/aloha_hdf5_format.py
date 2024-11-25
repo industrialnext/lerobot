@@ -273,7 +273,7 @@ def from_raw_to_lerobot_format(
         fps = 50
 
     pickle_file_names, features = load_from_raw(
-        raw_dir, videos_dir, fps, video, episodes, encoding
+        raw_dir, videos_dir, fps, video, episodes, encoding, 50
     )
     hf_dataset = to_hf_dataset(pickle_file_names, features)
     episode_data_index = calculate_episode_data_index(hf_dataset)
