@@ -34,7 +34,7 @@ from torch.cuda.amp import GradScaler
 
 import torch.multiprocessing as mp
 from torch.utils.data.distributed import DistributedSampler
-from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.nn.parallel import DistributedDataParallel
 from torch.distributed import init_process_group, destroy_process_group
 
 from lerobot.common.datasets.factory import make_dataset, resolve_delta_timestamps
@@ -181,7 +181,7 @@ def log_train_info(logger: Logger, info, step, cfg, dataset, is_online):
     num_episodes = num_samples / avg_samples_per_ep
     num_epochs = num_samples / dataset.num_samples
     log_items = [
-        f"device:{info['device']}",
+        f"device:{cfg.device}",
         f"step:{format_big_number(step)}",
         # number of samples seen during training
         f"smpl:{format_big_number(num_samples)}",
@@ -332,8 +332,8 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
         pretrained_policy_name_or_path=str(logger.last_pretrained_model_dir) if cfg.resume else None,
     )
 
-    # Wrap policy into DDP
-    policy = DDP(policy, device_ids=[device])
+    # Wrap policy into custom DDP
+    policy = HuggingfaceDistributedDataParallel(policy, device_ids=[device])
 
     assert isinstance(policy, nn.Module)
     # Create optimizer and scheduler
@@ -456,7 +456,6 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
         )
 
         train_info["dataloading_s"] = dataloading_s
-        train_info["device"] = device
 
         if step % cfg.training.log_freq == 0:
             log_train_info(logger, train_info, step, cfg, offline_dataset, is_online=False)
@@ -664,6 +663,12 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
     if eval_env:
         eval_env.close()
     logging.info("End of training")
+
+
+from huggingface_hub import PyTorchModelHubMixin
+
+class HuggingfaceDistributedDataParallel(DistributedDataParallel, PyTorchModelHubMixin):
+    pass
 
 
 def ddp_setup(rank: int, world_size: int):
