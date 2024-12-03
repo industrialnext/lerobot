@@ -333,7 +333,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
     )
 
     # Wrap policy into custom DDP
-    policy = HuggingfaceDistributedDataParallel(policy, device_ids=[device])
+    policy = DistributedDataParallel(policy, device_ids=[device])
 
     assert isinstance(policy, nn.Module)
     # Create optimizer and scheduler
@@ -389,7 +389,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
             # needed (choose 6 as a minimum for consistency without being overkill).
             logger.save_checkpont(
                 step,
-                policy,
+                policy.module,
                 optimizer,
                 lr_scheduler,
                 identifier=step_identifier,
@@ -663,12 +663,6 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
     if eval_env:
         eval_env.close()
     logging.info("End of training")
-
-
-from huggingface_hub import PyTorchModelHubMixin
-
-class HuggingfaceDistributedDataParallel(DistributedDataParallel, PyTorchModelHubMixin):
-    pass
 
 
 def ddp_setup(rank: int, world_size: int):
