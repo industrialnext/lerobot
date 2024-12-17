@@ -178,6 +178,10 @@ def encode_video_frames(
     video_path = Path(video_path)
     video_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # To see encoding options: ffmpeg -h encoder=av1_nvenc
+    # Test cmd:
+    # ffmpeg -f image2 -r 5 -i /home/elton/test/arducam1/%04d.png -vcodec av1_nvenc \
+    # -pix_fmt yuv420p -y -g 2 -bf 0 -cq 10 -report 1.mp4
     ffmpeg_args = OrderedDict(
         [
             ("-f", "image2"),
@@ -185,8 +189,12 @@ def encode_video_frames(
             ("-i", str(imgs_dir / "frame_%06d.png")),
             ("-vcodec", vcodec),
             ("-pix_fmt", pix_fmt),
+            ("-bf", "0"), # No b-frames bc i-frame is set to 2.
+            ("-cq", "10"),
         ]
     )
+    # av1_nvenc does not support crf
+    crf = None
 
     if g is not None:
         ffmpeg_args["-g"] = str(g)
