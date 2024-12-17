@@ -96,6 +96,7 @@ def make_dataset(cfg, split: str = "train") -> LeRobotDataset | MultiLeRobotData
         from lerobot.common.datasets.compute_stats import compute_stats
 
         data_dir = Path(cfg.hdf5_data_dir)
+        vid_dir = data_dir / "temp_video_dir"
 
         if data_dir.exists():
             logging.info(f"HDF5 data dir: {data_dir}")
@@ -103,7 +104,6 @@ def make_dataset(cfg, split: str = "train") -> LeRobotDataset | MultiLeRobotData
                 "vcodec": "av1_nvenc",
                 "g": 2,
             }
-            vid_dir = data_dir / "temp_video_dir"
             dataset, episode_data_index, info = from_raw_to_lerobot_format(raw_dir=data_dir, videos_dir=vid_dir, fps=cfg.env.fps, video=True, encoding=encoding)
             stats = compute_stats(dataset, batch_size=16, num_workers=16, max_num_samples=None)
         else:
@@ -114,11 +114,11 @@ def make_dataset(cfg, split: str = "train") -> LeRobotDataset | MultiLeRobotData
             hf_dataset=dataset,
             episode_data_index=episode_data_index,
             stats=stats,
-            # delta_timestamps=None,
             transform=image_transforms,
             split=split,
             delta_timestamps=cfg.training.get("delta_timestamps"),
             info=info,
+            videos_dir=vid_dir,
         )
     elif isinstance(cfg.dataset_repo_id, str):
         dataset = LeRobotDataset(

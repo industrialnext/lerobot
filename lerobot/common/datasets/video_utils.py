@@ -24,6 +24,7 @@ from typing import Any, ClassVar
 import pyarrow as pa
 import torch
 import torchvision
+from torchaudio.io import StreamReader
 from datasets.features.features import register_feature
 
 
@@ -63,6 +64,61 @@ def load_from_videos(
 
     return item
 
+def hw_decode_video_frames_torchaudio(
+    video_path: str,
+    timestamps: list[float],
+    tolerance_s: float,
+    codec: str = "av1_cuvid",
+    log_loaded_timestamps: bool = False,
+) -> torch.Tensor:
+    """Assume we only query sequential frames that follow the encoded FPS if loading mutltiple frames
+    """
+    reader = StreamReader(video_path)
+
+    if len(timestamps) == 1:
+        frames_per_chunk = 1
+        buffer_chunk_size = 1
+    else:
+        # TODO: tune this later
+        frames_per_chunk = 5
+        buffer_chunk_size = 3
+
+    reader.add_video_stream(
+        frames_per_chunk=frames_per_chunk,
+        buffer_chunk_size=buffer_chunk_size,
+        decoder=codec,
+        decoder_option={"gpu": "0"},
+        hw_accel="cuda:0",
+    )
+
+    # https://pytorch.org/audio/2.5.0/generated/torio.io.StreamingMediaDecoder.html#torio.io.StreamingMediaDecoder.seek
+    # Seek to the given timestamp
+    reader.seek(timestamps[0], mode="precise")
+
+    loaded_frames = []
+    number_of_chunck = (len(timestamps)-1) // frames_per_chunk + 1
+    for chunck_idx in range(number_of_chunck):
+        eof_reached = reader.fill_buffer()
+        # frames.shape: (n, C, H, W)
+        (frames,) = reader.pop_chunks() # A chunck of frames
+
+        end_index = frames_per_chunk
+        if chunck_idx == (number_of_chunck - 1):
+            remainder = len(timestamps) % frames_per_chunk
+            if remainder > 0:
+                end_index = remainder
+        elif eof_reached:
+            raise Exception(f"Video reached EOF and not all frames retrieved!")
+
+        loaded_frames.append(frames.data[:end_index])
+        if log_loaded_timestamps:
+            logging.info(f"A chunk of frames loaded at timestamp={frames.pts:.4f}")
+
+    # Shape: (n, C, H, W). Normalize
+    loaded_frames = torch.cat(loaded_frames).type(torch.float32) / 255
+
+    assert len(timestamps) == len(loaded_frames)
+    return loaded_frames
 
 def decode_video_frames_torchvision(
     video_path: str,
