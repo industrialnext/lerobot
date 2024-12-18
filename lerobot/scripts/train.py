@@ -38,7 +38,7 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.distributed import init_process_group, destroy_process_group
 
 from lerobot.common.datasets.factory import make_dataset, resolve_delta_timestamps
-from lerobot.common.datasets.lerobot_dataset import MultiLeRobotDataset
+from lerobot.common.datasets.lerobot_dataset import LeRobotDataset, MultiLeRobotDataset
 from lerobot.common.datasets.online_buffer import OnlineBuffer, compute_sampler_weights
 from lerobot.common.datasets.sampler import EpisodeAwareSampler
 from lerobot.common.datasets.utils import cycle
