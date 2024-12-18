@@ -113,8 +113,6 @@ def make_dataset(cfg, split: str = "train") -> LeRobotDataset | MultiLeRobotData
         else:
             raise ValueError(f"HDF5 data directory: {data_dir} does not exist!")
 
-        info["device"] = cfg.device
-
         dataset = LeRobotDataset.from_preloaded(
             root=data_dir,
             hf_dataset=dataset,
