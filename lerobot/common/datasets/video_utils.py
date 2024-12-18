@@ -98,7 +98,7 @@ def load_from_videos(
 
 
 def normalized_yuv_to_rgb(frames):
-    #frames = frames.cpu().to(torch.float)
+    # Expect normalized float data type
     y = frames[..., 0, :, :]
     u = frames[..., 1, :, :]
     v = frames[..., 2, :, :]
