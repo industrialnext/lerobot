@@ -165,6 +165,9 @@ def hw_decode_video_frames_torchaudio(
         elif eof_reached:
             raise Exception(f"Video reached EOF and not all frames retrieved!")
 
+        if frames is None:
+            raise ValueError("No frames retrieved!")
+
         loaded_frames.append(frames.data[:end_index])
         if log_loaded_timestamps:
             logging.info(f"A chunk of frames loaded at timestamp={frames.pts:.4f}")
