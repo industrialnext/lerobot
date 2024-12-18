@@ -284,8 +284,6 @@ def encode_video_frames(
             ("-cq", "10"),
         ]
     )
-    # av1_nvenc does not support crf
-    crf = None
 
     if g is not None:
         ffmpeg_args["-g"] = str(g)

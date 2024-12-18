@@ -102,7 +102,11 @@ def make_dataset(cfg, split: str = "train") -> LeRobotDataset | MultiLeRobotData
             logging.info(f"HDF5 data dir: {data_dir}")
             encoding = {
                 "vcodec": "av1_nvenc",
+                "pix_fmt": "nv12",
                 "g": 2,
+                "crf": None, # av1_nvenc does not support crf
+                "fast_decode": 0,
+                "overwrite": True,
             }
             dataset, episode_data_index, info = from_raw_to_lerobot_format(raw_dir=data_dir, videos_dir=vid_dir, fps=cfg.env.fps, video=True, encoding=encoding)
             stats = compute_stats(dataset, batch_size=16, num_workers=26, max_num_samples=None)
