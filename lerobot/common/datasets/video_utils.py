@@ -59,6 +59,7 @@ def load_from_videos_hw(
 
     return item
 
+
 def load_from_videos(
     item: dict[str, torch.Tensor],
     video_frame_keys: list[str],
@@ -94,6 +95,25 @@ def load_from_videos(
             item[key] = frames[0]
 
     return item
+
+
+def normalized_yuv_to_rgb(frames):
+    #frames = frames.cpu().to(torch.float)
+    y = frames[..., 0, :, :]
+    u = frames[..., 1, :, :]
+    v = frames[..., 2, :, :]
+
+    u = u - 0.5
+    v = v - 0.5
+
+    r = y + 1.14 * v
+    g = y + -0.396 * u - 0.581 * v
+    b = y + 2.029 * u
+
+    rgbs = torch.stack([r, g, b], -1)
+    rgbs = (rgbs * 255).clamp(0, 255).to(torch.uint8)
+    return rgbs
+
 
 def hw_decode_video_frames_torchaudio(
     video_path: str,
@@ -153,7 +173,9 @@ def hw_decode_video_frames_torchaudio(
     loaded_frames = torch.cat(loaded_frames).type(torch.float32) / 255
 
     assert len(timestamps) == len(loaded_frames)
-    return loaded_frames
+    # Convert from YUVs to RGBs in cuda
+    return normalized_yuv_to_rgb(loaded_frames)
+
 
 def decode_video_frames_torchvision(
     video_path: str,
