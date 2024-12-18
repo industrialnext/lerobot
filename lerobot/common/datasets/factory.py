@@ -105,9 +105,11 @@ def make_dataset(cfg, split: str = "train") -> LeRobotDataset | MultiLeRobotData
                 "g": 2,
             }
             dataset, episode_data_index, info = from_raw_to_lerobot_format(raw_dir=data_dir, videos_dir=vid_dir, fps=cfg.env.fps, video=True, encoding=encoding)
-            stats = compute_stats(dataset, batch_size=16, num_workers=16, max_num_samples=None)
+            stats = compute_stats(dataset, batch_size=16, num_workers=26, max_num_samples=None)
         else:
             raise ValueError(f"HDF5 data directory: {data_dir} does not exist!")
+
+        info["device"] = cfg.device
 
         dataset = LeRobotDataset.from_preloaded(
             root=data_dir,

@@ -145,12 +145,12 @@ class LeRobotDataset(torch.utils.data.Dataset):
             )
 
         if self.video:
-            item = load_from_videos(
+            item = load_from_videos_hw(
                 item,
                 self.video_frame_keys,
                 self.videos_dir,
                 self.tolerance_s,
-                self.video_backend, # Don't care
+                self.info["device"],
             )
 
         if self.image_transforms is not None:
