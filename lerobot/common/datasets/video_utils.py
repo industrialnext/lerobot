@@ -28,6 +28,37 @@ from torchaudio.io import StreamReader
 from datasets.features.features import register_feature
 
 
+def load_from_videos_hw(
+    item: dict[str, torch.Tensor],
+    video_frame_keys: list[str],
+    videos_dir: Path,
+    tolerance_s: float,
+    device: str = "cuda:0",
+):
+    # since video path already contains "videos" (e.g. videos_dir="data/videos", path="videos/episode_0.mp4")
+    data_dir = videos_dir.parent
+
+    for key in video_frame_keys:
+        if isinstance(item[key], list):
+            # load multiple frames at once (expected when delta_timestamps is not None)
+            timestamps = [frame["timestamp"] for frame in item[key]]
+            paths = [frame["path"] for frame in item[key]]
+            if len(set(paths)) > 1:
+                raise NotImplementedError("All video paths are expected to be the same for now.")
+            video_path = data_dir / paths[0]
+
+            frames = hw_decode_video_frames_torchaudio(video_path, timestamps, tolerance_s, device)
+            item[key] = frames
+        else:
+            # load one frame
+            timestamps = [item[key]["timestamp"]]
+            video_path = data_dir / item[key]["path"]
+
+            frames = hw_decode_video_frames_torchaudio(video_path, timestamps, tolerance_s, device)
+            item[key] = frames[0]
+
+    return item
+
 def load_from_videos(
     item: dict[str, torch.Tensor],
     video_frame_keys: list[str],
@@ -69,10 +100,14 @@ def hw_decode_video_frames_torchaudio(
     timestamps: list[float],
     tolerance_s: float,
     codec: str = "av1_cuvid",
+    device: str = "cuda:0",
     log_loaded_timestamps: bool = False,
 ) -> torch.Tensor:
     """Assume we only query sequential frames that follow the encoded FPS if loading mutltiple frames
     """
+    if not device[-1].isdigit():
+        raise Exception(f"No GPU device number specified: {device}")
+
     reader = StreamReader(video_path)
 
     if len(timestamps) == 1:
@@ -87,8 +122,8 @@ def hw_decode_video_frames_torchaudio(
         frames_per_chunk=frames_per_chunk,
         buffer_chunk_size=buffer_chunk_size,
         decoder=codec,
-        decoder_option={"gpu": "0"},
-        hw_accel="cuda:0",
+        decoder_option={"gpu": device[-1]},
+        hw_accel=device,
     )
 
     # https://pytorch.org/audio/2.5.0/generated/torio.io.StreamingMediaDecoder.html#torio.io.StreamingMediaDecoder.seek
