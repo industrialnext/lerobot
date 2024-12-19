@@ -414,7 +414,7 @@ def train(
         batch_size=cfg.training.batch_size,
         shuffle=shuffle,
         sampler=sampler,
-        pin_memory=device.type != "cpu",
+        #pin_memory=device.type != "cpu",
         drop_last=False,
     )
     dl_iter = cycle(dataloader)
