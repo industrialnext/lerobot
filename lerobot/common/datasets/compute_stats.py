@@ -24,7 +24,7 @@ from datasets import Image
 from lerobot.common.datasets.video_utils import VideoFrame
 
 
-def get_stats_einops_patterns(dataset, num_workers=0):
+def get_stats_einops_patterns(dataset, num_workers=0, keys_to_skip=set()):
     """These einops patterns will be used to aggregate batches and compute statistics.
 
     Note: We assume the images are in channel first format
@@ -40,6 +40,10 @@ def get_stats_einops_patterns(dataset, num_workers=0):
 
     stats_patterns = {}
     for key, feats_type in dataset.features.items():
+        if key in keys_to_skip:
+            print(f"Skipping key: {key} for stats")
+            continue
+
         # sanity check that tensors are not float64
         assert batch[key].dtype != torch.float64
 
@@ -64,13 +68,13 @@ def get_stats_einops_patterns(dataset, num_workers=0):
     return stats_patterns
 
 
-def compute_stats(dataset, batch_size=32, num_workers=16, max_num_samples=None):
+def compute_stats(dataset, batch_size=32, num_workers=16, max_num_samples=None, keys_to_skip=set()):
     """Compute mean/std and min/max statistics of all data keys in a LeRobotDataset."""
     if max_num_samples is None:
         max_num_samples = len(dataset)
 
     # for more info on why we need to set the same number of workers, see `load_from_videos`
-    stats_patterns = get_stats_einops_patterns(dataset, num_workers)
+    stats_patterns = get_stats_einops_patterns(dataset, num_workers, keys_to_skip)
 
     # mean and std will be computed incrementally while max and min will track the running value.
     mean, std, max, min = {}, {}, {}, {}

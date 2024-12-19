@@ -108,8 +108,13 @@ def make_dataset(cfg, split: str = "train") -> LeRobotDataset | MultiLeRobotData
                 "fast_decode": 0,
                 "overwrite": True,
             }
+
+            keys_to_skip = set()
+            if cfg.get("override_dataset_stats"):
+                keys_to_skip = set(cfg.get("override_dataset_stats").keys())
+
             dataset, episode_data_index, info = from_raw_to_lerobot_format(raw_dir=data_dir, videos_dir=vid_dir, fps=cfg.env.fps, video=True, encoding=encoding)
-            stats = compute_stats(dataset, batch_size=16, num_workers=26, max_num_samples=None)
+            stats = compute_stats(dataset, batch_size=16, num_workers=26, max_num_samples=None, keys_to_skip=keys_to_skip)
         else:
             raise ValueError(f"HDF5 data directory: {data_dir} does not exist!")
 
