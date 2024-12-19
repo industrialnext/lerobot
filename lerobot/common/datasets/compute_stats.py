@@ -41,7 +41,7 @@ def get_stats_einops_patterns(dataset, num_workers=0, keys_to_skip=set()):
     stats_patterns = {}
     for key, feats_type in dataset.features.items():
         if key in keys_to_skip:
-            print(f"Skipping key: {key} for stats")
+            print(f"Skipping key: {key} for stats compute")
             continue
 
         # sanity check that tensors are not float64
