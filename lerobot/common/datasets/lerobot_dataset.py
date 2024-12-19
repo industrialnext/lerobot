@@ -129,6 +129,10 @@ class LeRobotDataset(torch.utils.data.Dataset):
         # 1e-4 to account for possible numerical error
         return 1 / self.fps - 1e-4
 
+    @property
+    def device(self):
+        return self._device
+
     def set_device(self, device: str):
         self._device = device
 
@@ -152,7 +156,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
                 item,
                 self.video_frame_keys,
                 self.videos_dir,
-                self._device,
+                self.device,
             )
 
         if self.image_transforms is not None:
