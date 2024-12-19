@@ -129,7 +129,7 @@ def hw_decode_video_frames_torchaudio(
 
     if len(timestamps) == 1:
         frames_per_chunk = 1
-        buffer_chunk_size = 1
+        buffer_chunk_size = 5
     else:
         # TODO: tune this later
         frames_per_chunk = 5
