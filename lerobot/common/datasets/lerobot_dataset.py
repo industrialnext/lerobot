@@ -152,7 +152,6 @@ class LeRobotDataset(torch.utils.data.Dataset):
                 item,
                 self.video_frame_keys,
                 self.videos_dir,
-                self.tolerance_s,
                 self._device,
             )
 
