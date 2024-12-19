@@ -416,6 +416,7 @@ def train(
         sampler=sampler,
         #pin_memory=device.type != "cpu",
         drop_last=False,
+        persistent_workers=True,
     )
     dl_iter = cycle(dataloader)
 
