@@ -32,7 +32,6 @@ def load_from_videos_hw(
     item: dict[str, torch.Tensor],
     video_frame_keys: list[str],
     videos_dir: Path,
-    tolerance_s: float,
     device: str = "cuda:0",
 ):
     # since video path already contains "videos" (e.g. videos_dir="data/videos", path="videos/episode_0.mp4")
@@ -47,14 +46,14 @@ def load_from_videos_hw(
                 raise NotImplementedError("All video paths are expected to be the same for now.")
             video_path = data_dir / paths[0]
 
-            frames = hw_decode_video_frames_torchaudio(video_path, timestamps, tolerance_s, device)
+            frames = hw_decode_video_frames_torchaudio(video_path, timestamps, device)
             item[key] = frames
         else:
             # load one frame
             timestamps = [item[key]["timestamp"]]
             video_path = data_dir / item[key]["path"]
 
-            frames = hw_decode_video_frames_torchaudio(video_path, timestamps, tolerance_s, device)
+            frames = hw_decode_video_frames_torchaudio(video_path, timestamps, device)
             item[key] = frames[0]
 
     return item
@@ -118,7 +117,6 @@ def normalized_yuv_to_rgb(frames):
 def hw_decode_video_frames_torchaudio(
     video_path: str,
     timestamps: list[float],
-    tolerance_s: float,
     codec: str = "av1_cuvid",
     device: str = "cuda:0",
     log_loaded_timestamps: bool = False,
