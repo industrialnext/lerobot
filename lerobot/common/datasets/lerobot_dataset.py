@@ -33,7 +33,7 @@ from lerobot.common.datasets.utils import (
     load_videos,
     reset_episode_index,
 )
-from lerobot.common.datasets.video_utils import VideoFrame, load_from_videos
+from lerobot.common.datasets.video_utils import VideoFrame, load_from_videos_hw
 
 # For maintainers, see lerobot/common/datasets/push_dataset_to_hub/CODEBASE_VERSION.md
 CODEBASE_VERSION = "v1.6"
