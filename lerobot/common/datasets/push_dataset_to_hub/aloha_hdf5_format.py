@@ -154,7 +154,7 @@ def load_from_raw(
 
                     # store the reference to the video frame
                     ep_dict[img_key] = [
-                        {"path": f"videos/{fname}", "timestamp": i / fps} for i in range(num_frames)
+                        {"path": f"{videos_dir.name}/{fname}", "timestamp": i / fps} for i in range(num_frames)
                     ]
                 else:
                     ep_dict[img_key] = [PILImage.fromarray(x) for x in imgs_array]
