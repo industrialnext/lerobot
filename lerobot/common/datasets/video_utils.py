@@ -46,14 +46,14 @@ def load_from_videos_hw(
                 raise NotImplementedError("All video paths are expected to be the same for now.")
             video_path = data_dir / paths[0]
 
-            frames = hw_decode_video_frames_torchaudio(video_path, timestamps, device)
+            frames = hw_decode_video_frames_torchaudio(video_path, timestamps, device=device)
             item[key] = frames
         else:
             # load one frame
             timestamps = [item[key]["timestamp"]]
             video_path = data_dir / item[key]["path"]
 
-            frames = hw_decode_video_frames_torchaudio(video_path, timestamps, device)
+            frames = hw_decode_video_frames_torchaudio(video_path, timestamps, device=device)
             item[key] = frames[0]
 
     return item
