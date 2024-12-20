@@ -686,8 +686,9 @@ def train_wrapper(
         out_dir: str | None=None,
         job_name: str | None=None
     ):
-    # Update device index
-    cfg.device = f"cuda:{rank}"
+    if not cfg.device.split(":")[-1].isdigit():
+        # Update device index
+        cfg.device = f"cuda:{rank}"
 
     # Initialize the group process
     ddp_setup(rank, world_size)
