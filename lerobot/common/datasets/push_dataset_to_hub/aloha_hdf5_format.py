@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env pythonrom pathlib import Path
 
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
@@ -20,9 +20,12 @@ Contains utilities to process raw data format of HDF5 files like in: https://git
 import gc
 import shutil
 from pathlib import Path
+import multiprocessing
+from itertools import repeat
 
 import h5py
 import numpy as np
+import numpy.typing as npt
 import torch
 import tqdm
 from datasets import Dataset, Features, Image, Sequence, Value
@@ -78,26 +81,15 @@ def check_format(raw_dir) -> bool:
                     assert c < h and c < w, f"Expect (h,w,c) image format but ({h=},{w=},{c=}) provided."
 
 
-def load_from_raw(
-    raw_dir: Path,
-    videos_dir: Path,
-    fps: int,
-    video: bool,
-    episodes: list[int] | None = None,
-    encoding: dict | None = None,
-):
-    # only frames from simulation are uncompressed
-    compressed_images = "sim" not in raw_dir.name
-
-    hdf5_files = sorted(raw_dir.rglob("episode_*.hdf5"))
-    num_episodes = len(hdf5_files)
-
-    print("Found", num_episodes, "episodes")
-
+def load_hdf5s(hdf5_files: list | npt.NDArray,
+               videos_dir: Path,
+               fps: int,
+               compressed_images: bool,
+               encoding: dict | None):
     ep_dicts = []
-    ep_ids = episodes if episodes else range(num_episodes)
-    for ep_idx in tqdm.tqdm(ep_ids):
+    for ep_idx in tqdm.tqdm(range(len(hdf5_files))):
         ep_path = hdf5_files[ep_idx]
+
         with h5py.File(ep_path, "r") as ep:
             num_frames = ep["/action"].shape[0]
 
@@ -130,7 +122,7 @@ def load_from_raw(
                     # load all images in RAM
                     imgs_array = ep[f"/observations/images/{camera}"][:]
 
-                if video:
+                if videos_dir is not None:
                     # save png images in temporary directory
                     tmp_imgs_dir = videos_dir / "tmp_images"
                     save_images_concurrently(imgs_array, tmp_imgs_dir)
@@ -167,7 +159,41 @@ def load_from_raw(
 
         gc.collect()
 
-    data_dict = concatenate_episodes(ep_dicts)
+    return ep_dicts
+
+
+def load_from_raw(
+    raw_dir: Path,
+    videos_dir: Path,
+    fps: int,
+    video: bool,
+    episodes: list[int] | None = None,
+    encoding: dict | None = None,
+    num_workers: int = 1, # This should be the number of GPUs
+):
+    # only frames from simulation are uncompressed
+    compressed_images = "sim" not in raw_dir.name
+
+    hdf5_files = sorted(raw_dir.rglob("episode_*.hdf5"))
+    num_episodes = len(hdf5_files)
+
+    print("Found", num_episodes, "episodes")
+
+    file_chunks = np.array_split(hdf5_files, num_workers)
+    all_ep_dicts = []
+    # Create the pool
+    with multiprocessing.Pool(num_workers) as pool:
+        zipped_args = zip(file_chunks,
+                          repeat(videos_dir),
+                          repeat(fps),
+                          repeat(compressed_images),
+                          repeat(encoding),
+                         )
+        [all_ep_dicts.extend(ret) for ret in pool.starmap(load_hdf5s, zipped_args)]
+
+    print("all_ep_dicts:", len(all_ep_dicts))
+
+    data_dict = concatenate_episodes(all_ep_dicts)
 
     total_frames = data_dict["frame_index"].shape[0]
     data_dict["index"] = torch.arange(0, total_frames, 1)
