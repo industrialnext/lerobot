@@ -85,7 +85,9 @@ def load_hdf5s(hdf5_files: list | npt.NDArray,
                videos_dir: Path,
                fps: int,
                compressed_images: bool,
-               encoding: dict | None):
+               encoding: dict | None,
+               process_id: int,
+):
     ep_dicts = []
     for ep_idx in tqdm.tqdm(range(len(hdf5_files))):
         ep_path = hdf5_files[ep_idx]
@@ -124,20 +126,20 @@ def load_hdf5s(hdf5_files: list | npt.NDArray,
 
                 if videos_dir is not None:
                     # save png images in temporary directory
-                    tmp_imgs_dir = videos_dir / "tmp_images"
+                    tmp_imgs_dir = videos_dir / f"tmp_images_{str(process_id)}"
                     save_images_concurrently(imgs_array, tmp_imgs_dir)
 
                     # encode images to a mp4 video
-                    fname = f"{img_key}_episode_{ep_idx:06d}.mp4"
-                    video_path = videos_dir / fname
-                    encode_video_frames(tmp_imgs_dir, video_path, fps, **(encoding or {}))
+                    video_file = f"{img_key}_ep_{process_id}_{ep_idx:05d}.mp4"
+                    video_path = videos_dir / video_file
+                    encode_video_frames(tmp_imgs_dir, video_path, fps, **(encoding or {}), process_id=process_id)
 
                     # clean temporary images directory
                     shutil.rmtree(tmp_imgs_dir)
 
                     # store the reference to the video frame
                     ep_dict[img_key] = [
-                        {"path": f"{videos_dir.name}/{fname}", "timestamp": i / fps} for i in range(num_frames)
+                        {"path": f"{videos_dir.name}/{video_file}", "timestamp": i / fps} for i in range(num_frames)
                     ]
                 else:
                     ep_dict[img_key] = [PILImage.fromarray(x) for x in imgs_array]
@@ -169,7 +171,7 @@ def load_from_raw(
     video: bool,
     episodes: list[int] | None = None,
     encoding: dict | None = None,
-    num_workers: int = 1, # This should be the number of GPUs
+    num_workers: int = 2, # This should be the number of GPUs if using HW encoding
 ):
     # only frames from simulation are uncompressed
     compressed_images = "sim" not in raw_dir.name
@@ -188,6 +190,7 @@ def load_from_raw(
                           repeat(fps),
                           repeat(compressed_images),
                           repeat(encoding),
+                          range(num_workers),
                          )
         [all_ep_dicts.extend(ret) for ret in pool.starmap(load_hdf5s, zipped_args)]
 

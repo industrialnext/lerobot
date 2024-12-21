@@ -286,6 +286,7 @@ def encode_video_frames(
     fast_decode: int = 0,
     log_level: str | None = "error",
     overwrite: bool = False,
+    process_id: int = 0,
 ) -> None:
     """More info on ffmpeg arguments tuning on `benchmark/video/README.md`"""
     video_path = Path(video_path)
@@ -306,6 +307,10 @@ def encode_video_frames(
             ("-cq", "10"),
         ]
     )
+
+    if "nvenc" in vcodec:
+        # HW encoding
+        ffmpeg_args["-gpu"] = str(process_id)
 
     if g is not None:
         ffmpeg_args["-g"] = str(g)
