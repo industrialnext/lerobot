@@ -90,8 +90,10 @@ def load_hdf5s(hdf5_files: list | npt.NDArray,
 ):
     ep_dicts = []
     description = f"proc_{process_id}"
-    for ep_idx in tqdm.trange(len(hdf5_files), desc=description, position=process_id):
-        ep_path = hdf5_files[ep_idx]
+    for file_and_index in tqdm.tqdm(hdf5_files, desc=description, position=process_id):
+        ep_path = file_and_index[0]
+        ep_idx = file_and_index[1]
+        #print(process_id, ep_path, ep_idx)
 
         with h5py.File(ep_path, "r") as ep:
             num_frames = ep["/action"].shape[0]
@@ -120,18 +122,17 @@ def load_hdf5s(hdf5_files: list | npt.NDArray,
                     for data in ep[f"/observations/images/{camera}"]:
                         imgs_array.append(cv2.imdecode(data, 1))
                     imgs_array = np.array(imgs_array)
-
                 else:
                     # load all images in RAM
                     imgs_array = ep[f"/observations/images/{camera}"][:]
 
                 if videos_dir is not None:
                     # save png images in temporary directory
-                    tmp_imgs_dir = videos_dir / f"tmp_images_{str(process_id)}"
+                    tmp_imgs_dir = videos_dir / f"tmp_images_{process_id}"
                     save_images_concurrently(imgs_array, tmp_imgs_dir)
 
                     # encode images to a mp4 video
-                    video_file = f"{img_key}_ep_{process_id}_{ep_idx:05d}.mp4"
+                    video_file = f"{img_key}_ep_{ep_idx:05d}.mp4"
                     video_path = videos_dir / video_file
                     encode_video_frames(tmp_imgs_dir, video_path, fps, **(encoding or {}), process_id=process_id)
 
@@ -155,9 +156,6 @@ def load_hdf5s(hdf5_files: list | npt.NDArray,
             ep_dict["frame_index"] = torch.arange(0, num_frames, 1)
             ep_dict["timestamp"] = torch.arange(0, num_frames, 1) / fps
             ep_dict["next.done"] = done
-            # TODO(rcadene): add reward and success by computing them in sim
-
-            assert isinstance(ep_idx, int)
             ep_dicts.append(ep_dict)
 
         gc.collect()
@@ -182,9 +180,6 @@ def load_from_raw(
 
     print(f"Found {num_episodes} episodes, loading with {num_workers} process")
 
-    file_chunks = np.array_split(hdf5_files, num_workers)
-    all_ep_dicts = []
-
     if num_workers > 1:
         tqdm.tqdm.set_lock(multiprocessing.RLock())  # for managing output contention
         initializer = tqdm.tqdm.set_lock
@@ -193,9 +188,12 @@ def load_from_raw(
         initializer = None
         initargs = None
 
+    # [[file1, index1], [file2, index2], ...]
+    file_and_index_list = [[hdf5_files[idx], idx] for idx in range(len(hdf5_files))]
+    all_ep_dicts = []
     # Create the pool
     with multiprocessing.Pool(num_workers, initializer=initializer, initargs=initargs) as pool:
-        zipped_args = zip(file_chunks,
+        zipped_args = zip(np.array_split(file_and_index_list, num_workers),
                           repeat(videos_dir),
                           repeat(fps),
                           repeat(compressed_images),
