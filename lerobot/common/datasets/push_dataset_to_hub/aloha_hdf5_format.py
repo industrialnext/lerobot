@@ -81,19 +81,20 @@ def check_format(raw_dir) -> bool:
                     assert c < h and c < w, f"Expect (h,w,c) image format but ({h=},{w=},{c=}) provided."
 
 
-def load_hdf5s(hdf5_files: list | npt.NDArray,
-               videos_dir: Path,
-               fps: int,
-               compressed_images: bool,
-               encoding: dict | None,
-               process_id: int,
+def load_hdf5s(
+    hdf5_files: list | npt.NDArray,
+    videos_dir: Path,
+    fps: int,
+    compressed_images: bool,
+    encoding: dict | None,
+    process_id: int,
 ):
     ep_dicts = []
     description = f"proc_{process_id}"
     for file_and_index in tqdm.tqdm(hdf5_files, desc=description, position=process_id):
         ep_path = file_and_index[0]
         ep_idx = file_and_index[1]
-        #print(process_id, ep_path, ep_idx)
+        assert isinstance(ep_idx, int)
 
         with h5py.File(ep_path, "r") as ep:
             num_frames = ep["/action"].shape[0]
@@ -132,7 +133,7 @@ def load_hdf5s(hdf5_files: list | npt.NDArray,
                     save_images_concurrently(imgs_array, tmp_imgs_dir)
 
                     # encode images to a mp4 video
-                    video_file = f"{img_key}_ep_{ep_idx:05d}.mp4"
+                    video_file = f"{img_key}_ep{ep_idx:05d}.mp4"
                     video_path = videos_dir / video_file
                     encode_video_frames(tmp_imgs_dir, video_path, fps, **(encoding or {}), process_id=process_id)
 
@@ -202,7 +203,7 @@ def load_from_raw(
                          )
         [all_ep_dicts.extend(ret) for ret in pool.starmap(load_hdf5s, zipped_args)]
 
-    print("all_ep_dicts:", len(all_ep_dicts))
+    print("all_ep_dicts count:", len(all_ep_dicts))
 
     data_dict = concatenate_episodes(all_ep_dicts)
 
