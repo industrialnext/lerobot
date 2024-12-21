@@ -89,7 +89,8 @@ def load_hdf5s(hdf5_files: list | npt.NDArray,
                process_id: int,
 ):
     ep_dicts = []
-    for ep_idx in tqdm.tqdm(range(len(hdf5_files))):
+    description = f"proc_{process_id}"
+    for ep_idx in tqdm.trange(len(hdf5_files), desc=description, position=process_id):
         ep_path = hdf5_files[ep_idx]
 
         with h5py.File(ep_path, "r") as ep:
@@ -171,7 +172,7 @@ def load_from_raw(
     video: bool,
     episodes: list[int] | None = None,
     encoding: dict | None = None,
-    num_workers: int = 2, # This should be the number of GPUs if using HW encoding
+    num_workers: int = 1, # This should be the number of GPUs if using HW encoding
 ):
     # only frames from simulation are uncompressed
     compressed_images = "sim" not in raw_dir.name
@@ -179,12 +180,21 @@ def load_from_raw(
     hdf5_files = sorted(raw_dir.rglob("episode_*.hdf5"))
     num_episodes = len(hdf5_files)
 
-    print("Found", num_episodes, "episodes")
+    print(f"Found {num_episodes} episodes, loading with {num_workers} process")
 
     file_chunks = np.array_split(hdf5_files, num_workers)
     all_ep_dicts = []
+
+    if num_workers > 1:
+        tqdm.tqdm.set_lock(multiprocessing.RLock())  # for managing output contention
+        initializer = tqdm.tqdm.set_lock
+        initargs = (tqdm.tqdm.get_lock(),)
+    else:
+        initializer = None
+        initargs = None
+
     # Create the pool
-    with multiprocessing.Pool(num_workers) as pool:
+    with multiprocessing.Pool(num_workers, initializer=initializer, initargs=initargs) as pool:
         zipped_args = zip(file_chunks,
                           repeat(videos_dir),
                           repeat(fps),
