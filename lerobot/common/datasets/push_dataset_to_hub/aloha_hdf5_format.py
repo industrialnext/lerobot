@@ -91,6 +91,7 @@ def load_hdf5s(
 ):
     ep_dicts = []
     description = f"proc_{process_id}"
+    skipped_encoded = 0
     for file_and_index in tqdm.tqdm(hdf5_files, desc=description, position=process_id):
         ep_path = file_and_index[0]
         ep_idx = file_and_index[1]
@@ -128,17 +129,22 @@ def load_hdf5s(
                     imgs_array = ep[f"/observations/images/{camera}"][:]
 
                 if videos_dir is not None:
-                    # save png images in temporary directory
-                    tmp_imgs_dir = videos_dir / f"tmp_images_{process_id}"
-                    save_images_concurrently(imgs_array, tmp_imgs_dir)
-
-                    # encode images to a mp4 video
-                    video_file = f"{img_key}_ep{ep_idx:05d}.mp4"
+                    file_prefix = str(ep_path).split('sim/', 1)[-1].replace("/", "_").split(".")[0]
+                    video_file = f"{file_prefix}@{img_key}.mp4"
                     video_path = videos_dir / video_file
-                    encode_video_frames(tmp_imgs_dir, video_path, fps, **(encoding or {}), process_id=process_id)
 
-                    # clean temporary images directory
-                    shutil.rmtree(tmp_imgs_dir)
+                    if not video_path.is_file():
+                        # Video file does not exist
+                        # save png images in temporary directory
+                        tmp_imgs_dir = videos_dir / f"tmp_images_{process_id}"
+                        save_images_concurrently(imgs_array, tmp_imgs_dir)
+                        # encode images to a mp4 video
+                        encode_video_frames(tmp_imgs_dir, video_path, fps, **(encoding or {}), process_id=process_id)
+
+                        # clean temporary images directory
+                        shutil.rmtree(tmp_imgs_dir)
+                    else:
+                        skipped_encoded += 1
 
                     # store the reference to the video frame
                     ep_dict[img_key] = [
@@ -160,6 +166,8 @@ def load_hdf5s(
             ep_dicts.append(ep_dict)
 
         gc.collect()
+
+    print(f"{skipped_encoded} videos already exist, not encoded!")
 
     return ep_dicts
 
