@@ -137,7 +137,7 @@ def load_hdf5s(
                         # Video file does not exist
                         # save png images in temporary directory
                         tmp_imgs_dir = videos_dir / f"tmp_images_{process_id}"
-                        save_images_concurrently(imgs_array, tmp_imgs_dir)
+                        save_images_concurrently(imgs_array, tmp_imgs_dir, max_workers=16)
                         # encode images to a mp4 video
                         encode_video_frames(tmp_imgs_dir, video_path, fps, **(encoding or {}), process_id=process_id)
 
