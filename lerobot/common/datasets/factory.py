@@ -101,11 +101,11 @@ def make_dataset(cfg, split: str = "train") -> LeRobotDataset | MultiLeRobotData
         if data_dir.exists():
             logging.info(f"HDF5 data dir: {data_dir}")
             encoding = {
-                "vcodec": "av1_nvenc",
-                "pix_fmt": "nv12",
-                "g": 2,
-                "crf": None, # av1_nvenc does not support crf
-                "fast_decode": 0,
+                "vcodec": "libsvtav1", # hw: av1_nvenc
+                "pix_fmt": "yuv420p",
+                "g": 1,
+                "crf": 30, # av1_nvenc does not support crf
+                "fast_decode": 1,
                 "overwrite": True,
             }
 
@@ -128,6 +128,7 @@ def make_dataset(cfg, split: str = "train") -> LeRobotDataset | MultiLeRobotData
             delta_timestamps=cfg.training.get("delta_timestamps"),
             info=info,
             videos_dir=vid_dir,
+            video_backend="libdav1d",
         )
     elif isinstance(cfg.dataset_repo_id, str):
         dataset = LeRobotDataset(

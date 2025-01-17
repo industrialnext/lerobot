@@ -32,7 +32,8 @@ def load_from_videos_hw(
     item: dict[str, torch.Tensor],
     video_frame_keys: list[str],
     videos_dir: Path,
-    device: str = "cuda:0",
+    decoder: str = "libdav1d",
+    device: str = None,
 ):
     # since video path already contains "videos" (e.g. videos_dir="data/videos", path="videos/episode_0.mp4")
     data_dir = videos_dir.parent
@@ -46,14 +47,14 @@ def load_from_videos_hw(
                 raise NotImplementedError("All video paths are expected to be the same for now.")
             video_path = data_dir / paths[0]
 
-            frames = hw_decode_video_frames_torchaudio(video_path, timestamps, device=device)
+            frames = decode_video_frames_torchaudio(video_path, timestamps, decoder, device=device)
             item[key] = frames
         else:
             # load one frame
             timestamps = [item[key]["timestamp"]]
             video_path = data_dir / item[key]["path"]
 
-            frames = hw_decode_video_frames_torchaudio(video_path, timestamps, device=device)
+            frames = decode_video_frames_torchaudio(video_path, timestamps, decoder, device=device)
             item[key] = frames[0]
 
     return item
@@ -113,17 +114,22 @@ def normalized_yuv_to_normalized_rgb(frames):
     return rgbs
 
 
-def hw_decode_video_frames_torchaudio(
+def decode_video_frames_torchaudio(
     video_path: str,
     timestamps: list[float],
-    codec: str = "av1_cuvid",
-    device: str = "cuda:0",
+    decoder: str = "libdav1d",
+    device: str = None,
     log_loaded_timestamps: bool = False,
 ) -> torch.Tensor:
     """Assume we only query sequential frames that follow the encoded FPS if loading mutltiple frames
     """
-    if not device[-1].isdigit():
-        raise Exception(f"No GPU device number specified: {device}")
+    if device is not None:
+        if not device[-1].isdigit():
+            raise Exception(f"No GPU device number specified: {device}")
+        # decoder = "av1_cuvid, device = "cuda:0"
+        decoder_option = {"gpu": device[-1]}
+    else:
+        decoder_option = None
 
     reader = StreamReader(video_path)
 
@@ -138,8 +144,8 @@ def hw_decode_video_frames_torchaudio(
     reader.add_video_stream(
         frames_per_chunk=frames_per_chunk,
         buffer_chunk_size=buffer_chunk_size,
-        decoder=codec,
-        decoder_option={"gpu": device[-1]},
+        decoder=decoder,
+        decoder_option=decoder_option,
         hw_accel=device,
     )
 
@@ -303,7 +309,7 @@ def encode_video_frames(
             ("-i", str(imgs_dir / "frame_%06d.png")),
             ("-vcodec", vcodec),
             ("-pix_fmt", pix_fmt),
-            ("-bf", "0"), # No b-frames bc i-frame is set to 2.
+            ("-bf", "0"), # No b-frames if i-frame is set <= 2.
             ("-cq", "10"),
         ]
     )
@@ -311,6 +317,11 @@ def encode_video_frames(
     if "nvenc" in vcodec:
         # HW encoding
         ffmpeg_args["-gpu"] = str(process_id)
+
+    cmd_env = None
+    if vcodec == "libsvtav1":
+        # Warning level
+        cmd_env = {"SVT_LOG": "2"}
 
     if g is not None:
         ffmpeg_args["-g"] = str(g)
@@ -332,7 +343,7 @@ def encode_video_frames(
 
     ffmpeg_cmd = ["ffmpeg"] + ffmpeg_args + [str(video_path)]
     # redirect stdin to subprocess.DEVNULL to prevent reading random keyboard inputs from terminal
-    subprocess.run(ffmpeg_cmd, check=True, stdin=subprocess.DEVNULL)
+    subprocess.run(ffmpeg_cmd, check=True, stdin=subprocess.DEVNULL, env=cmd_env)
 
     if not video_path.exists():
         raise OSError(

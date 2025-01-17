@@ -156,7 +156,8 @@ class LeRobotDataset(torch.utils.data.Dataset):
                 item,
                 self.video_frame_keys,
                 self.videos_dir,
-                self.device,
+                self.video_backend,
+                self.device if "cuvid" in self.video_backend else None
             )
 
         if self.image_transforms is not None:
@@ -195,7 +196,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         stats=None,
         info=None,
         videos_dir=None,
-        video_backend=None,
+        video_backend=None, # Or video decoder
     ) -> "LeRobotDataset":
         """Create a LeRobot Dataset from existing data and attributes instead of loading from the filesystem.
 
