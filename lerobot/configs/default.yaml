@@ -32,6 +32,9 @@ seed: ???
 dataset_repo_id: lerobot/pusht
 video_backend: pyav
 
+make_dataset:
+  num_workers: 1
+
 training:
   offline_steps: ???
 

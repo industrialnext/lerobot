@@ -187,7 +187,7 @@ def load_from_raw(
     hdf5_files = sorted(raw_dir.rglob("episode_*.hdf5"))
     num_episodes = len(hdf5_files)
 
-    print(f"Found {num_episodes} episodes, loading with {num_workers} process")
+    print(f"Found {num_episodes} episodes, loading with {num_workers} process(es)")
 
     if num_workers > 1:
         tqdm.tqdm.set_lock(multiprocessing.RLock())  # for managing output contention
@@ -262,6 +262,7 @@ def from_raw_to_lerobot_format(
     video: bool = True,
     episodes: list[int] | None = None,
     encoding: dict | None = None,
+    num_workers: int = 1,
 ):
     # sanity check
     check_format(raw_dir)
@@ -269,7 +270,7 @@ def from_raw_to_lerobot_format(
     if fps is None:
         fps = 50
 
-    data_dict = load_from_raw(raw_dir, videos_dir, fps, video, episodes, encoding)
+    data_dict = load_from_raw(raw_dir, videos_dir, fps, video, episodes, encoding, num_workers)
     hf_dataset = to_hf_dataset(data_dict, video)
     episode_data_index = calculate_episode_data_index(hf_dataset)
     info = {
