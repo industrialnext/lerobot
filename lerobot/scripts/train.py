@@ -38,7 +38,7 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.distributed import init_process_group, destroy_process_group
 
 from lerobot.common.datasets.factory import make_dataset, resolve_delta_timestamps
-from lerobot.common.datasets.lerobot_dataset import MultiLeRobotDataset
+from lerobot.common.datasets.lerobot_dataset import LeRobotDataset, MultiLeRobotDataset
 from lerobot.common.datasets.online_buffer import OnlineBuffer, compute_sampler_weights
 from lerobot.common.datasets.sampler import EpisodeAwareSampler
 from lerobot.common.datasets.utils import cycle
@@ -241,7 +241,12 @@ def log_eval_info(logger, info, step, cfg, dataset, is_online):
     logger.log_dict(info, step, mode="eval")
 
 
-def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = None):
+def train(
+        cfg: DictConfig,
+        offline_dataset: LeRobotDataset | MultiLeRobotDataset,
+        out_dir: str | None = None,
+        job_name: str | None = None
+    ):
     if out_dir is None:
         raise NotImplementedError()
     if job_name is None:
@@ -303,19 +308,14 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
 
     set_global_seed(cfg.seed)
 
+    # Set device in dataset
+    offline_dataset.set_device(cfg.device)
+
     # Check device is available
     device = get_safe_torch_device(cfg.device, log=True)
 
     torch.backends.cudnn.benchmark = True
     torch.backends.cuda.matmul.allow_tf32 = True
-
-    logging.info("make_dataset")
-    offline_dataset = make_dataset(cfg)
-    if isinstance(offline_dataset, MultiLeRobotDataset):
-        logging.info(
-            "Multiple datasets were provided. Applied the following index mapping to the provided datasets: "
-            f"{pformat(offline_dataset.repo_id_to_index , indent=2)}"
-        )
 
     # Create environment used for evaluating checkpoints during training on simulation data.
     # On real-world data, no need to create an environment as evaluations are done outside train.py,
@@ -416,6 +416,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
         sampler=sampler,
         pin_memory=device.type != "cpu",
         drop_last=False,
+        persistent_workers=True,
     )
     dl_iter = cycle(dataloader)
 
@@ -677,9 +678,17 @@ def ddp_setup(rank: int, world_size: int):
     init_process_group(backend="nccl", rank=rank, world_size=world_size)
 
 
-def train_wrapper(rank: int, world_size: int, cfg: DictConfig, out_dir: str|None=None, job_name: str|None=None):
-    # Update device index
-    cfg.device = f"cuda:{rank}"
+def train_wrapper(
+        rank: int,
+        world_size: int,
+        cfg: DictConfig,
+        dataset: LeRobotDataset | MultiLeRobotDataset,
+        out_dir: str | None=None,
+        job_name: str | None=None
+    ):
+    if not cfg.device.split(":")[-1].isdigit():
+        # Update device index
+        cfg.device = f"cuda:{rank}"
 
     # Initialize the group process
     ddp_setup(rank, world_size)
@@ -689,7 +698,7 @@ def train_wrapper(rank: int, world_size: int, cfg: DictConfig, out_dir: str|None
         cfg.training.save_checkpoint = False
         cfg.wandb.enable = False
 
-    train(cfg, out_dir=out_dir, job_name=job_name)
+    train(cfg, dataset, out_dir=out_dir, job_name=job_name)
     # Clean up
     destroy_process_group()
 
@@ -705,9 +714,18 @@ def train_cli(cfg: dict):
 
     logging.info(f"{world_size} GPU(s) used")
 
+    logging.info("make_dataset")
+    offline_dataset = make_dataset(cfg)
+    if isinstance(offline_dataset, MultiLeRobotDataset):
+        logging.info(
+            "Multiple datasets were provided. Applied the following index mapping to the provided datasets: "
+            f"{pformat(offline_dataset.repo_id_to_index , indent=2)}"
+        )
+
     args = (
         world_size,
         cfg,
+        offline_dataset,
         hydra.core.hydra_config.HydraConfig.get().run.dir,
         hydra.core.hydra_config.HydraConfig.get().job.name,
     )

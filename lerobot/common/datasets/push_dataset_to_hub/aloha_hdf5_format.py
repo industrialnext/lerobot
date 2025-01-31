@@ -20,9 +20,12 @@ Contains utilities to process raw data format of HDF5 files like in: https://git
 import gc
 import shutil
 from pathlib import Path
+import multiprocessing
+from itertools import repeat
 
 import h5py
 import numpy as np
+import numpy.typing as npt
 import torch
 import tqdm
 from datasets import Dataset, Features, Image, Sequence, Value
@@ -78,26 +81,22 @@ def check_format(raw_dir) -> bool:
                     assert c < h and c < w, f"Expect (h,w,c) image format but ({h=},{w=},{c=}) provided."
 
 
-def load_from_raw(
-    raw_dir: Path,
+def load_hdf5s(
+    hdf5_files: list | npt.NDArray,
     videos_dir: Path,
     fps: int,
-    video: bool,
-    episodes: list[int] | None = None,
-    encoding: dict | None = None,
+    compressed_images: bool,
+    encoding: dict | None,
+    process_id: int,
 ):
-    # only frames from simulation are uncompressed
-    compressed_images = "sim" not in raw_dir.name
-
-    hdf5_files = sorted(raw_dir.rglob("episode_*.hdf5"))
-    num_episodes = len(hdf5_files)
-
-    print("Found", num_episodes, "episodes")
-
     ep_dicts = []
-    ep_ids = episodes if episodes else range(num_episodes)
-    for ep_idx in tqdm.tqdm(ep_ids):
-        ep_path = hdf5_files[ep_idx]
+    description = f"proc_{process_id}"
+    skipped_encoded = 0
+    for file_and_index in tqdm.tqdm(hdf5_files, desc=description, position=process_id):
+        ep_path = file_and_index[0]
+        ep_idx = file_and_index[1]
+        assert isinstance(ep_idx, int)
+
         with h5py.File(ep_path, "r") as ep:
             num_frames = ep["/action"].shape[0]
 
@@ -125,27 +124,31 @@ def load_from_raw(
                     for data in ep[f"/observations/images/{camera}"]:
                         imgs_array.append(cv2.imdecode(data, 1))
                     imgs_array = np.array(imgs_array)
-
                 else:
                     # load all images in RAM
                     imgs_array = ep[f"/observations/images/{camera}"][:]
 
-                if video:
-                    # save png images in temporary directory
-                    tmp_imgs_dir = videos_dir / "tmp_images"
-                    save_images_concurrently(imgs_array, tmp_imgs_dir)
+                if videos_dir is not None:
+                    file_prefix = str(ep_path).split('sim/', 1)[-1].replace("/", "_").split(".")[0]
+                    video_file = f"{file_prefix}@{img_key}.mp4"
+                    video_path = videos_dir / video_file
 
-                    # encode images to a mp4 video
-                    fname = f"{img_key}_episode_{ep_idx:06d}.mp4"
-                    video_path = videos_dir / fname
-                    encode_video_frames(tmp_imgs_dir, video_path, fps, **(encoding or {}))
+                    if not video_path.is_file():
+                        # Video file does not exist
+                        # save png images in temporary directory
+                        tmp_imgs_dir = videos_dir / f"tmp_images_{process_id}"
+                        save_images_concurrently(imgs_array, tmp_imgs_dir, max_workers=16)
+                        # encode images to a mp4 video
+                        encode_video_frames(tmp_imgs_dir, video_path, fps, **(encoding or {}), process_id=process_id)
 
-                    # clean temporary images directory
-                    shutil.rmtree(tmp_imgs_dir)
+                        # clean temporary images directory
+                        shutil.rmtree(tmp_imgs_dir)
+                    else:
+                        skipped_encoded += 1
 
                     # store the reference to the video frame
                     ep_dict[img_key] = [
-                        {"path": f"videos/{fname}", "timestamp": i / fps} for i in range(num_frames)
+                        {"path": f"{videos_dir.name}/{video_file}", "timestamp": i / fps} for i in range(num_frames)
                     ]
                 else:
                     ep_dict[img_key] = [PILImage.fromarray(x) for x in imgs_array]
@@ -160,14 +163,57 @@ def load_from_raw(
             ep_dict["frame_index"] = torch.arange(0, num_frames, 1)
             ep_dict["timestamp"] = torch.arange(0, num_frames, 1) / fps
             ep_dict["next.done"] = done
-            # TODO(rcadene): add reward and success by computing them in sim
-
-            assert isinstance(ep_idx, int)
             ep_dicts.append(ep_dict)
 
         gc.collect()
 
-    data_dict = concatenate_episodes(ep_dicts)
+    print(f"{skipped_encoded} videos already exist!")
+
+    return ep_dicts
+
+
+def load_from_raw(
+    raw_dir: Path,
+    videos_dir: Path,
+    fps: int,
+    video: bool,
+    episodes: list[int] | None = None,
+    encoding: dict | None = None,
+    num_workers: int = 1, # This should be the number of GPUs if using HW encoding
+):
+    # only frames from simulation are uncompressed
+    compressed_images = "sim" not in raw_dir.name
+
+    hdf5_files = sorted(raw_dir.rglob("episode_*.hdf5"))
+    num_episodes = len(hdf5_files)
+
+    print(f"Found {num_episodes} episodes, loading with {num_workers} process(es)")
+
+    if num_workers > 1:
+        tqdm.tqdm.set_lock(multiprocessing.RLock())  # for managing output contention
+        initializer = tqdm.tqdm.set_lock
+        initargs = (tqdm.tqdm.get_lock(),)
+    else:
+        initializer = None
+        initargs = None
+
+    # [[file1, index1], [file2, index2], ...]
+    file_and_index_list = [[hdf5_files[idx], idx] for idx in range(len(hdf5_files))]
+    all_ep_dicts = []
+    # Create the pool
+    with multiprocessing.Pool(num_workers, initializer=initializer, initargs=initargs) as pool:
+        zipped_args = zip(np.array_split(file_and_index_list, num_workers),
+                          repeat(videos_dir),
+                          repeat(fps),
+                          repeat(compressed_images),
+                          repeat(encoding),
+                          range(num_workers),
+                         )
+        [all_ep_dicts.extend(ret) for ret in pool.starmap(load_hdf5s, zipped_args)]
+
+    print("all_ep_dicts count:", len(all_ep_dicts))
+
+    data_dict = concatenate_episodes(all_ep_dicts)
 
     total_frames = data_dict["frame_index"].shape[0]
     data_dict["index"] = torch.arange(0, total_frames, 1)
@@ -213,9 +259,10 @@ def from_raw_to_lerobot_format(
     raw_dir: Path,
     videos_dir: Path,
     fps: int | None = None,
-    video: bool = True,
+    video: bool = False,
     episodes: list[int] | None = None,
     encoding: dict | None = None,
+    num_workers: int = 1,
 ):
     # sanity check
     check_format(raw_dir)
@@ -223,7 +270,7 @@ def from_raw_to_lerobot_format(
     if fps is None:
         fps = 50
 
-    data_dict = load_from_raw(raw_dir, videos_dir, fps, video, episodes, encoding)
+    data_dict = load_from_raw(raw_dir, videos_dir, fps, video, episodes, encoding, num_workers)
     hf_dataset = to_hf_dataset(data_dict, video)
     episode_data_index = calculate_episode_data_index(hf_dataset)
     info = {

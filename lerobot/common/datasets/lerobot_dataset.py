@@ -33,7 +33,7 @@ from lerobot.common.datasets.utils import (
     load_videos,
     reset_episode_index,
 )
-from lerobot.common.datasets.video_utils import VideoFrame, load_from_videos
+from lerobot.common.datasets.video_utils import VideoFrame, load_from_videos_hw
 
 # For maintainers, see lerobot/common/datasets/push_dataset_to_hub/CODEBASE_VERSION.md
 CODEBASE_VERSION = "v1.6"
@@ -129,6 +129,13 @@ class LeRobotDataset(torch.utils.data.Dataset):
         # 1e-4 to account for possible numerical error
         return 1 / self.fps - 1e-4
 
+    @property
+    def device(self):
+        return self._device
+
+    def set_device(self, device: str):
+        self._device = device
+
     def __len__(self):
         return self.num_samples
 
@@ -145,12 +152,12 @@ class LeRobotDataset(torch.utils.data.Dataset):
             )
 
         if self.video:
-            item = load_from_videos(
+            item = load_from_videos_hw(
                 item,
                 self.video_frame_keys,
                 self.videos_dir,
-                self.tolerance_s,
                 self.video_backend,
+                self.device if "cuvid" in self.video_backend else None
             )
 
         if self.image_transforms is not None:
@@ -189,7 +196,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         stats=None,
         info=None,
         videos_dir=None,
-        video_backend=None,
+        video_backend=None, # Or video decoder
     ) -> "LeRobotDataset":
         """Create a LeRobot Dataset from existing data and attributes instead of loading from the filesystem.
 

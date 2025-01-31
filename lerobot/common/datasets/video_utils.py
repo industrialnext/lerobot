@@ -24,7 +24,40 @@ from typing import Any, ClassVar
 import pyarrow as pa
 import torch
 import torchvision
+from torchaudio.io import StreamReader
 from datasets.features.features import register_feature
+
+
+def load_from_videos_hw(
+    item: dict[str, torch.Tensor],
+    video_frame_keys: list[str],
+    videos_dir: Path,
+    decoder: str = "libdav1d",
+    device: str = None,
+):
+    # since video path already contains "videos" (e.g. videos_dir="data/videos", path="videos/episode_0.mp4")
+    data_dir = videos_dir.parent
+
+    for key in video_frame_keys:
+        if isinstance(item[key], list):
+            # load multiple frames at once (expected when delta_timestamps is not None)
+            timestamps = [frame["timestamp"] for frame in item[key]]
+            paths = [frame["path"] for frame in item[key]]
+            if len(set(paths)) > 1:
+                raise NotImplementedError("All video paths are expected to be the same for now.")
+            video_path = data_dir / paths[0]
+
+            frames = decode_video_frames_torchaudio(video_path, timestamps, decoder, device=device)
+            item[key] = frames
+        else:
+            # load one frame
+            timestamps = [item[key]["timestamp"]]
+            video_path = data_dir / item[key]["path"]
+
+            frames = decode_video_frames_torchaudio(video_path, timestamps, decoder, device=device)
+            item[key] = frames[0]
+
+    return item
 
 
 def load_from_videos(
@@ -62,6 +95,92 @@ def load_from_videos(
             item[key] = frames[0]
 
     return item
+
+
+def normalized_yuv_to_normalized_rgb(frames):
+    # Expect normalized float data type
+    y = frames[..., 0, :, :]
+    u = frames[..., 1, :, :]
+    v = frames[..., 2, :, :]
+
+    u = u - 0.5
+    v = v - 0.5
+
+    r = y + 1.14 * v
+    g = y + -0.396 * u - 0.581 * v
+    b = y + 2.029 * u
+
+    rgbs = torch.stack([r, g, b], dim=1)
+    return rgbs
+
+
+def decode_video_frames_torchaudio(
+    video_path: str,
+    timestamps: list[float],
+    decoder: str = "libdav1d",
+    device: str = None,
+    log_loaded_timestamps: bool = False,
+) -> torch.Tensor:
+    """Assume we only query sequential frames that follow the encoded FPS if loading mutltiple frames
+    """
+    if device is not None:
+        if not device[-1].isdigit():
+            raise Exception(f"No GPU device number specified: {device}")
+        # decoder = "av1_cuvid, device = "cuda:0"
+        decoder_option = {"gpu": device[-1]}
+    else:
+        decoder_option = None
+
+    reader = StreamReader(video_path)
+
+    if len(timestamps) == 1:
+        frames_per_chunk = 1
+        buffer_chunk_size = 5
+    else:
+        # TODO: tune this later
+        frames_per_chunk = 5
+        buffer_chunk_size = 3
+
+    reader.add_video_stream(
+        frames_per_chunk=frames_per_chunk,
+        buffer_chunk_size=buffer_chunk_size,
+        decoder=decoder,
+        decoder_option=decoder_option,
+        hw_accel=device,
+    )
+
+    # https://pytorch.org/audio/2.5.0/generated/torio.io.StreamingMediaDecoder.html#torio.io.StreamingMediaDecoder.seek
+    # Seek to the given timestamp
+    reader.seek(timestamps[0], mode="precise")
+
+    loaded_frames = []
+    number_of_chunck = (len(timestamps)-1) // frames_per_chunk + 1
+    for chunck_idx in range(number_of_chunck):
+        eof_reached = reader.fill_buffer()
+        # frames.shape: (n, C, H, W)
+        (frames,) = reader.pop_chunks() # A chunck of frames
+
+        end_index = frames_per_chunk
+        if chunck_idx == (number_of_chunck - 1):
+            remainder = len(timestamps) % frames_per_chunk
+            if remainder > 0:
+                end_index = remainder
+        elif eof_reached:
+            raise Exception(f"Video reached EOF and not all frames retrieved!")
+
+        if frames is None:
+            raise ValueError("No frames retrieved!")
+
+        loaded_frames.append(frames.data[:end_index])
+        if log_loaded_timestamps:
+            logging.info(f"A chunk of frames loaded at timestamp={frames.pts:.4f}")
+
+    # Shape: (n, C, H, W). Normalize
+    loaded_frames = torch.cat(loaded_frames).type(torch.float32) / 255
+
+    assert len(timestamps) == len(loaded_frames)
+    # Convert from YUVs to RGBs in cuda
+    return normalized_yuv_to_normalized_rgb(loaded_frames)
 
 
 def decode_video_frames_torchvision(
@@ -173,11 +292,16 @@ def encode_video_frames(
     fast_decode: int = 0,
     log_level: str | None = "error",
     overwrite: bool = False,
+    process_id: int = 0,
 ) -> None:
     """More info on ffmpeg arguments tuning on `benchmark/video/README.md`"""
     video_path = Path(video_path)
     video_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # To see encoding options: ffmpeg -h encoder=av1_nvenc
+    # Test cmd:
+    # ffmpeg -f image2 -r 5 -i /home/elton/test/arducam1/%04d.png -vcodec av1_nvenc \
+    # -pix_fmt yuv420p -y -g 2 -bf 0 -cq 10 -report 1.mp4
     ffmpeg_args = OrderedDict(
         [
             ("-f", "image2"),
@@ -185,8 +309,19 @@ def encode_video_frames(
             ("-i", str(imgs_dir / "frame_%06d.png")),
             ("-vcodec", vcodec),
             ("-pix_fmt", pix_fmt),
+            ("-bf", "0"), # No b-frames if i-frame is set <= 2.
+            #("-cq", "10"),
         ]
     )
+
+    if "nvenc" in vcodec:
+        # HW encoding
+        ffmpeg_args["-gpu"] = str(process_id)
+
+    cmd_env = None
+    if vcodec == "libsvtav1":
+        # Warning level
+        cmd_env = {"SVT_LOG": "2"}
 
     if g is not None:
         ffmpeg_args["-g"] = str(g)
@@ -208,7 +343,7 @@ def encode_video_frames(
 
     ffmpeg_cmd = ["ffmpeg"] + ffmpeg_args + [str(video_path)]
     # redirect stdin to subprocess.DEVNULL to prevent reading random keyboard inputs from terminal
-    subprocess.run(ffmpeg_cmd, check=True, stdin=subprocess.DEVNULL)
+    subprocess.run(ffmpeg_cmd, check=True, stdin=subprocess.DEVNULL, env=cmd_env)
 
     if not video_path.exists():
         raise OSError(

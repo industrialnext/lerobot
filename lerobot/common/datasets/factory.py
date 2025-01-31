@@ -96,11 +96,25 @@ def make_dataset(cfg, split: str = "train") -> LeRobotDataset | MultiLeRobotData
         from lerobot.common.datasets.compute_stats import compute_stats
 
         data_dir = Path(cfg.hdf5_data_dir)
+        vid_dir = data_dir / "temp_video_dir" if cfg.video else None
 
         if data_dir.exists():
             logging.info(f"HDF5 data dir: {data_dir}")
-            dataset, episode_data_index, info = from_raw_to_lerobot_format(raw_dir=data_dir, videos_dir=None, fps=cfg.env.fps, video=False)
-            stats = compute_stats(dataset, batch_size=16, num_workers=16, max_num_samples=None)
+            encoding = {
+                "vcodec": "libsvtav1", # hw: av1_nvenc
+                "pix_fmt": "yuv420p",
+                "g": 1,
+                "crf": 1, # av1_nvenc does not support crf
+                "fast_decode": 1,
+                "overwrite": True,
+            }
+
+            keys_to_skip = set()
+            if cfg.get("override_dataset_stats"):
+                keys_to_skip = set(cfg.get("override_dataset_stats").keys())
+
+            dataset, episode_data_index, info = from_raw_to_lerobot_format(raw_dir=data_dir, videos_dir=vid_dir, fps=cfg.env.fps, video=cfg.video, encoding=encoding, num_workers=cfg.make_dataset.num_workers)
+            stats = compute_stats(dataset, batch_size=16, num_workers=26, max_num_samples=None, keys_to_skip=keys_to_skip)
         else:
             raise ValueError(f"HDF5 data directory: {data_dir} does not exist!")
 
@@ -109,11 +123,12 @@ def make_dataset(cfg, split: str = "train") -> LeRobotDataset | MultiLeRobotData
             hf_dataset=dataset,
             episode_data_index=episode_data_index,
             stats=stats,
-            # delta_timestamps=None,
             transform=image_transforms,
             split=split,
             delta_timestamps=cfg.training.get("delta_timestamps"),
             info=info,
+            videos_dir=vid_dir,
+            video_backend="libdav1d",
         )
     elif isinstance(cfg.dataset_repo_id, str):
         dataset = LeRobotDataset(
@@ -137,6 +152,10 @@ def make_dataset(cfg, split: str = "train") -> LeRobotDataset | MultiLeRobotData
             for stats_type, listconfig in stats_dict.items():
                 # example of stats_type: min, max, mean, std
                 stats = OmegaConf.to_container(listconfig, resolve=True)
-                dataset.stats[key][stats_type] = torch.tensor(stats, dtype=torch.float32)
+                if key in dataset.stats:
+                    dataset.stats[key][stats_type] = torch.tensor(stats, dtype=torch.float32)
+                else:
+                    dataset.stats[key] = {}
+                    dataset.stats[key][stats_type] = torch.tensor(stats, dtype=torch.float32)
 
     return dataset
