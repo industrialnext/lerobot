@@ -104,7 +104,7 @@ def make_dataset(cfg, split: str = "train") -> LeRobotDataset | MultiLeRobotData
                 "vcodec": "libsvtav1", # hw: av1_nvenc
                 "pix_fmt": "yuv420p",
                 "g": 1,
-                "crf": 30, # av1_nvenc does not support crf
+                "crf": 1, # av1_nvenc does not support crf
                 "fast_decode": 1,
                 "overwrite": True,
             }

@@ -310,7 +310,7 @@ def encode_video_frames(
             ("-vcodec", vcodec),
             ("-pix_fmt", pix_fmt),
             ("-bf", "0"), # No b-frames if i-frame is set <= 2.
-            ("-cq", "10"),
+            #("-cq", "10"),
         ]
     )
 
