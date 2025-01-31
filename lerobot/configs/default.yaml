@@ -31,6 +31,7 @@ seed: ???
 # datsets are provided.
 dataset_repo_id: lerobot/pusht
 video_backend: pyav
+video: true
 
 make_dataset:
   num_workers: 1

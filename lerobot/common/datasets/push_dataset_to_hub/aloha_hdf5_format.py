@@ -167,7 +167,7 @@ def load_hdf5s(
 
         gc.collect()
 
-    print(f"{skipped_encoded} videos already exist, not encoded!")
+    print(f"{skipped_encoded} videos already exist!")
 
     return ep_dicts
 
@@ -259,7 +259,7 @@ def from_raw_to_lerobot_format(
     raw_dir: Path,
     videos_dir: Path,
     fps: int | None = None,
-    video: bool = True,
+    video: bool = False,
     episodes: list[int] | None = None,
     encoding: dict | None = None,
     num_workers: int = 1,
